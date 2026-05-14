@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -65,9 +66,15 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 	var newTurn []*genai.Content
 	newTurn = append(newTurn, userContent)
 
+	now := time.Now()
+	dateInfo := fmt.Sprintf(
+		"오늘 날짜: %s (%s)\n날짜 표현(오늘, 어제, 내일, 이번 주/저번 주 요일 등)은 반드시 YYYY-MM-DD 형식으로 변환해 --date 인자에 사용하세요.\n\n",
+		now.Format("2006-01-02"), weekdayKo(now),
+	)
+
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
-			Parts: []*genai.Part{{Text: a.systemPrompt}},
+			Parts: []*genai.Part{{Text: dateInfo + a.systemPrompt}},
 		},
 		Tools: []*genai.Tool{FootballCLITool},
 	}
@@ -139,6 +146,10 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		contents = append(contents, toolContent)
 		newTurn = append(newTurn, toolContent)
 	}
+}
+
+func weekdayKo(t time.Time) string {
+	return [...]string{"일", "월", "화", "수", "목", "금", "토"}[t.Weekday()] + "요일"
 }
 
 // extractArgs는 Gemini FunctionCall Args에서 "args" 배열 추출
