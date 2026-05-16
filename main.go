@@ -29,7 +29,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "에이전트 초기화 실패: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("준비 완료. 질문을 입력하세요 (빈 입력 2회 또는 Ctrl+C로 종료).\n")
+	fmt.Println("준비 완료. 질문을 입력하세요 (빈 입력 2회 또는 Ctrl+C로 종료).")
+	fmt.Println()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
