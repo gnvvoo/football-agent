@@ -10,7 +10,11 @@ import (
 	"google.golang.org/genai"
 )
 
-const modelName = "gemini-2.5-flash"
+const (
+	modelName     = "gemini-2.5-flash"
+	maxHistoryLen = 100 // Content 항목 최대 개수 (초과 시 오래된 항목 제거)
+	maxIterations = 10  // 에이전트 루프 최대 반복 횟수
+)
 
 // Agent는 Gemini 기반 football 에이전트
 type Agent struct {
@@ -79,7 +83,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		Tools: []*genai.Tool{FootballCLITool},
 	}
 
-	for {
+	for range maxIterations {
 		resp, err := a.client.Models.GenerateContent(ctx, modelName, contents, config)
 		if err != nil {
 			return "", fmt.Errorf("Gemini API 호출 실패: %w", err)
@@ -109,6 +113,9 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				}
 			}
 			a.history = append(a.history, newTurn...)
+			if len(a.history) > maxHistoryLen {
+				a.history = a.history[len(a.history)-maxHistoryLen:]
+			}
 			return sb.String(), nil
 		}
 
@@ -146,6 +153,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		contents = append(contents, toolContent)
 		newTurn = append(newTurn, toolContent)
 	}
+	return "", fmt.Errorf("에이전트 루프 최대 반복 횟수(%d) 초과", maxIterations)
 }
 
 func weekdayKo(t time.Time) string {
