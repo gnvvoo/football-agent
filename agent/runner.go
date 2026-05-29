@@ -30,8 +30,8 @@ func cliPath() string {
 }
 
 // RunCLI는 football-cli 바이너리를 실행하고 결과 반환
-func RunCLI(args []string) (*CLIResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
+func RunCLI(ctx context.Context, args []string) (*CLIResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, cliPath(), args...)
@@ -57,8 +57,8 @@ func RunCLI(args []string) (*CLIResult, error) {
 }
 
 // RunCLIJSON는 CLIResult를 JSON 문자열로 직렬화해 반환
-func RunCLIJSON(args []string) (string, error) {
-	result, err := RunCLI(args)
+func RunCLIJSON(ctx context.Context, args []string) (string, error) {
+	result, err := RunCLI(ctx, args)
 	if err != nil {
 		return "", err
 	}
