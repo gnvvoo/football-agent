@@ -34,7 +34,7 @@ func New(apiKey string) (*Agent, error) {
 		return nil, fmt.Errorf("Gemini 클라이언트 생성 실패: %w", err)
 	}
 
-	manifest, err := RunCLI([]string{"--manifest", "--json"})
+	manifest, err := RunCLI(ctx, []string{"--manifest", "--json"})
 	if err != nil {
 		return nil, fmt.Errorf("manifest 실행 실패: %w", err)
 	}
@@ -128,9 +128,10 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			args := extractArgs(fc.Args)
 			fmt.Printf("[도구 실행] football-cli %s\n", strings.Join(args, " "))
 
-			jsonStr, err := RunCLIJSON(args)
+			jsonStr, err := RunCLIJSON(ctx, args)
 			if err != nil {
-				jsonStr = fmt.Sprintf(`{"error":"%s","exit_code":-1}`, err.Error())
+				b, _ := json.Marshal(map[string]any{"error": err.Error(), "exit_code": -1})
+				jsonStr = string(b)
 			}
 
 			var result map[string]any
