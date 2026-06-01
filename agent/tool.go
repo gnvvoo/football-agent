@@ -2,11 +2,13 @@ package agent
 
 import "google.golang.org/genai"
 
+const toolName = "football_cli"
+
 // FootballCLITool은 Gemini에 전달할 football_cli 도구 정의
 var FootballCLITool = &genai.Tool{
 	FunctionDeclarations: []*genai.FunctionDeclaration{
 		{
-			Name: "football_cli",
+			Name: toolName,
 			Description: `football-cli를 실행해 유럽 5대 리그(EPL, LaLiga, Bundesliga, SerieA, Ligue1) 축구 데이터를 조회한다.
 항상 --json --no-color --quiet 플래그를 args에 포함해야 한다.
 

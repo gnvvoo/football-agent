@@ -122,7 +122,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		// 함수 호출 실행 후 결과를 FunctionResponse로 반환
 		var respParts []*genai.Part
 		for _, fc := range fcs {
-			if fc.Name != "football_cli" {
+			if fc.Name != toolName {
 				continue
 			}
 			args := extractArgs(fc.Args)
@@ -141,7 +141,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 
 			respParts = append(respParts, &genai.Part{
 				FunctionResponse: &genai.FunctionResponse{
-					Name:     fc.Name,
+					Name:     toolName,
 					Response: result,
 				},
 			})
