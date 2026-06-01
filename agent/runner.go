@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -42,8 +43,8 @@ func RunCLI(ctx context.Context, args []string) (*CLIResult, error) {
 	err := cmd.Run()
 	exitCode := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			return nil, fmt.Errorf("CLI 실행 실패: %w", err)
 		}
 		exitCode = exitErr.ExitCode()
