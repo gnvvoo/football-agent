@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -54,8 +55,32 @@ football-cli 매니페스트:
 	}, nil
 }
 
+// ToolCall은 에이전트 루프 중 실행된 도구 호출 1건(이름+인자)을 기록한다
+type ToolCall struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+}
+
+// RunResult는 RunTraced의 결과: 최종 답변, 실행된 도구 호출 목록, 모델 버전, 총 토큰 수
+type RunResult struct {
+	Answer       string
+	ToolCalls    []ToolCall
+	ModelVersion string
+	TotalTokens  int32
+}
+
 // Run은 유저 메시지를 받아 에이전트 루프를 실행하고 최종 답변 반환
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
+	result, err := a.RunTraced(ctx, userMessage)
+	if err != nil {
+		return "", err
+	}
+	return result.Answer, nil
+}
+
+// RunTraced는 Run과 동일하게 에이전트 루프를 실행하되, 실행된 도구 호출 목록과
+// 모델 버전/토큰 사용량 등 비대화형 모드에서 필요한 부가 정보를 함께 반환한다
+func (a *Agent) RunTraced(ctx context.Context, userMessage string) (*RunResult, error) {
 	userContent := &genai.Content{
 		Role:  "user",
 		Parts: []*genai.Part{{Text: userMessage}},
@@ -83,13 +108,24 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		Tools: []*genai.Tool{FootballCLITool},
 	}
 
+	var toolCalls []ToolCall
+	var modelVersion string
+	var totalTokens int32
+
 	for range maxIterations {
 		resp, err := a.client.Models.GenerateContent(ctx, modelName, contents, config)
 		if err != nil {
-			return "", fmt.Errorf("Gemini API 호출 실패: %w", err)
+			return nil, fmt.Errorf("Gemini API 호출 실패: %w", err)
 		}
 		if len(resp.Candidates) == 0 {
-			return "", fmt.Errorf("Gemini 응답 후보 없음")
+			return nil, fmt.Errorf("Gemini 응답 후보 없음")
+		}
+
+		if resp.ModelVersion != "" {
+			modelVersion = resp.ModelVersion
+		}
+		if resp.UsageMetadata != nil {
+			totalTokens += resp.UsageMetadata.TotalTokenCount
 		}
 
 		modelContent := resp.Candidates[0].Content
@@ -116,7 +152,12 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			if len(a.history) > maxHistoryLen {
 				a.history = a.history[len(a.history)-maxHistoryLen:]
 			}
-			return sb.String(), nil
+			return &RunResult{
+				Answer:       sb.String(),
+				ToolCalls:    toolCalls,
+				ModelVersion: modelVersion,
+				TotalTokens:  totalTokens,
+			}, nil
 		}
 
 		// 함수 호출 실행 후 결과를 FunctionResponse로 반환
@@ -126,7 +167,8 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				continue
 			}
 			args := extractArgs(fc.Args)
-			fmt.Printf("[도구 실행] football-cli %s\n", strings.Join(args, " "))
+			toolCalls = append(toolCalls, ToolCall{Name: fc.Name, Args: fc.Args})
+			fmt.Fprintf(os.Stderr, "[도구 실행] football-cli %s\n", strings.Join(args, " "))
 
 			jsonStr, err := RunCLIJSON(ctx, args)
 			if err != nil {
@@ -154,7 +196,48 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		contents = append(contents, toolContent)
 		newTurn = append(newTurn, toolContent)
 	}
-	return "", fmt.Errorf("에이전트 루프 최대 반복 횟수(%d) 초과", maxIterations)
+	return nil, fmt.Errorf("에이전트 루프 최대 반복 횟수(%d) 초과", maxIterations)
+}
+
+// StructureResult는 Structure 호출의 결과: 스키마에 맞춘 원문 JSON 텍스트와
+// 모델 버전/토큰 사용량
+type StructureResult struct {
+	RawJSON      string
+	ModelVersion string
+	TotalTokens  int32
+}
+
+// Structure는 도구 호출 없이(Function Calling 미사용) 응답 스키마를 지정해
+// 모델이 JSON 형식으로만 답하도록 강제하는 별도 호출이다. Gemini API는 같은
+// 요청에서 Tools(Function Calling)와 ResponseSchema를 함께 사용할 수 없으므로,
+// 에이전트 루프(RunTraced)가 자연어 답변을 만든 뒤 이 메서드로 구조화한다.
+func (a *Agent) Structure(ctx context.Context, prompt string, schema *genai.Schema) (*StructureResult, error) {
+	contents := []*genai.Content{
+		{Role: "user", Parts: []*genai.Part{{Text: prompt}}},
+	}
+	config := &genai.GenerateContentConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   schema,
+	}
+
+	resp, err := a.client.Models.GenerateContent(ctx, modelName, contents, config)
+	if err != nil {
+		return nil, fmt.Errorf("구조화 응답 생성 실패: %w", err)
+	}
+	if len(resp.Candidates) == 0 {
+		return nil, fmt.Errorf("구조화 응답 후보 없음")
+	}
+
+	var totalTokens int32
+	if resp.UsageMetadata != nil {
+		totalTokens = resp.UsageMetadata.TotalTokenCount
+	}
+
+	return &StructureResult{
+		RawJSON:      resp.Text(),
+		ModelVersion: resp.ModelVersion,
+		TotalTokens:  totalTokens,
+	}, nil
 }
 
 func weekdayKo(t time.Time) string {
